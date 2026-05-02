@@ -2,109 +2,234 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSession } from '../context/SessionContext'
 import { PROGRAMME, getTodayKey } from '../data/programme'
-import { GROUPE_COLORS, TECH_COLORS, TECH_LABELS } from '../data/colors'
-import { formatFormat, formatDuration, isPR, getLastPoids } from '../utils/formatters'
-import CircularTimer from '../components/CircularTimer'
+import { GROUPE_COLORS, TECH_COLORS } from '../data/colors'
+import { formatFormat, isPR, getLastPoids } from '../utils/formatters'
 
-function SerieRow({ setIdx, set, exercise, charges, onChange, onComplete }) {
-  const lastKg = getLastPoids(exercise.nom, charges)
-  const pr = set.done && set.poids && isPR(exercise.nom, set.poids, charges)
+// ─── Constants & helpers ────────────────────────────────────────────────────
+
+const TIMER_KEY = 'muscu_timer_end'
+
+async function scheduleNotification(delaySec) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  try {
+    const reg = await navigator.serviceWorker?.ready
+    reg?.active?.postMessage({ type: 'SET_TIMER', delay: delaySec * 1000, body: "Série suivante — c'est parti !" })
+  } catch {}
+}
+
+function repsLabel(ex) {
+  if (ex.repsSpecial) return ex.repsSpecial
+  return ex.repsMin === ex.repsMax ? `${ex.repsMin}` : `${ex.repsMin}–${ex.repsMax}`
+}
+
+// ─── InlineTimer ────────────────────────────────────────────────────────────
+
+function InlineTimer({ endTime, duration, onDone }) {
+  const [remaining, setRemaining] = useState(() =>
+    Math.max(0, Math.ceil((endTime - Date.now()) / 1000))
+  )
+  const firedRef = useRef(false)
+
+  useEffect(() => {
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((endTime - Date.now()) / 1000))
+      setRemaining(left)
+      if (left === 0 && !firedRef.current) {
+        firedRef.current = true
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200])
+        setTimeout(onDone, 800)
+      }
+    }
+    tick()
+    const id = setInterval(tick, 500)
+    return () => clearInterval(id)
+  }, [endTime, onDone])
+
+  const r = 14, circ = 2 * Math.PI * r
+  const progress = duration > 0 ? Math.max(0, (endTime - Date.now()) / (duration * 1000)) : 0
+  const offset = circ * (1 - progress)
+  const color = remaining <= 10 ? '#EF4444' : remaining <= 30 ? '#F59E0B' : '#10B981'
 
   return (
-    <div className={`flex items-center gap-2 py-1 ${set.done ? 'opacity-50' : ''}`}>
-      <span className="text-white/30 text-sm w-5 text-center">{setIdx + 1}</span>
-      <div className="flex items-center bg-white/5 rounded-xl overflow-hidden flex-1">
-        <input
-          type="number"
-          inputMode="decimal"
-          value={set.reps}
-          onChange={e => onChange('reps', e.target.value)}
-          placeholder={exercise.repsMin > 0 ? String(exercise.repsMin) : '—'}
-          disabled={set.done}
-          className="w-full bg-transparent text-white text-center py-2 text-sm outline-none placeholder-white/20"
-        />
-        <span className="text-white/30 text-xs pr-2">reps</span>
-      </div>
-      <div className="flex items-center bg-white/5 rounded-xl overflow-hidden flex-1">
-        <input
-          type="number"
-          inputMode="decimal"
-          value={set.poids}
-          onChange={e => onChange('poids', e.target.value)}
-          placeholder={lastKg ? String(lastKg) : '0'}
-          disabled={set.done}
-          className="w-full bg-transparent text-white text-center py-2 text-sm outline-none placeholder-white/20"
-        />
-        <span className="text-white/30 text-xs pr-2">kg</span>
-      </div>
-      {pr && <span className="text-xs">🔥</span>}
-      <button
-        onClick={onComplete}
-        disabled={set.done}
-        className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors active:scale-95"
-        style={{
-          background: set.done ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.08)',
-          color: set.done ? '#10B981' : 'rgba(255,255,255,0.4)',
-        }}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-          <path d="M20 6L9 17l-5-5" />
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      background: '#0d0d0d', border: `1px solid ${color}35`,
+      borderRadius: 8, padding: '8px 12px', marginTop: 8,
+    }}>
+      <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0 }}>
+        <svg width="36" height="36" style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx="18" cy="18" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2.5" />
+          <circle cx="18" cy="18" r={r} fill="none" stroke={color} strokeWidth="2.5"
+            strokeDasharray={circ} strokeDashoffset={offset}
+            style={{ transition: 'stroke-dashoffset 0.5s linear, stroke 0.3s' }}
+          />
         </svg>
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 800, color, fontFamily: 'system-ui',
+        }}>
+          {remaining}
+        </div>
+      </div>
+      <div style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>Repos en cours</div>
+      <button
+        onClick={onDone}
+        style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}
+      >
+        Passer
       </button>
     </div>
   )
 }
 
-function ExerciseCard({ exIdx, exercise, sets, charges, onSetChange, onSetComplete }) {
-  const [open, setOpen] = useState(true)
-  const color = GROUPE_COLORS[exercise.groupe] || '#FF6B35'
-  const done = sets.filter(s => s.done).length
-  const total = sets.length
+// ─── SerieRow ────────────────────────────────────────────────────────────────
+
+function SerieRow({ setIdx, set, exercise, charges, onChange, onToggle, isSuperset, exoNames }) {
+  const lastKg = getLastPoids(exercise.nom, charges)
+  const pr = set.done && set.poids && isPR(exercise.nom, set.poids, charges)
+  const rl = repsLabel(exercise)
+
+  const rowBase = {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '12px 14px', borderRadius: 10, marginBottom: 4,
+    cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s',
+    background: set.done ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.04)',
+    border: `1px solid ${set.done ? 'rgba(16,185,129,0.22)' : 'rgba(255,255,255,0.07)'}`,
+  }
+  const numStyle = { color: set.done ? '#10B981' : 'rgba(255,255,255,0.25)', fontWeight: 700, fontSize: 13, width: 18, textAlign: 'center', flexShrink: 0 }
+  const inputStyle = (filled) => ({
+    width: 58, background: filled ? 'rgba(255,107,53,0.1)' : 'rgba(255,255,255,0.06)',
+    border: `1px solid ${filled ? 'rgba(255,107,53,0.3)' : 'rgba(255,255,255,0.08)'}`,
+    borderRadius: 7, padding: '5px 6px', fontSize: 13,
+    color: '#fff', textAlign: 'center', fontFamily: 'inherit',
+    opacity: set.done ? 0.5 : 1, outline: 'none',
+  })
+  const checkStyle = {
+    fontSize: 15, color: set.done ? '#10B981' : 'rgba(255,255,255,0.18)',
+    transition: 'color 0.2s', width: 20, textAlign: 'center', flexShrink: 0,
+  }
+
+  if (isSuperset) {
+    return (
+      <div style={rowBase} onClick={onToggle}>
+        <span style={numStyle}>{setIdx + 1}</span>
+        <span style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>{rl} reps</span>
+        <input type="number" inputMode="decimal" value={set.w1 ?? ''}
+          style={inputStyle(!!set.w1)} placeholder="—" disabled={set.done}
+          onClick={e => e.stopPropagation()}
+          onChange={e => { e.stopPropagation(); onChange('w1', e.target.value) }}
+        />
+        <input type="number" inputMode="decimal" value={set.w2 ?? ''}
+          style={inputStyle(!!set.w2)} placeholder="—" disabled={set.done}
+          onClick={e => e.stopPropagation()}
+          onChange={e => { e.stopPropagation(); onChange('w2', e.target.value) }}
+        />
+        <span style={checkStyle}>{set.done ? '✓' : '○'}</span>
+      </div>
+    )
+  }
 
   return (
-    <div className="rounded-2xl overflow-hidden mb-3" style={{ background: '#111111', borderLeft: `3px solid ${color}` }}>
+    <div style={rowBase} onClick={onToggle}>
+      <span style={numStyle}>{setIdx + 1}</span>
+      <span style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>{rl} reps</span>
+      {lastKg && !set.poids && (
+        <span style={{ fontSize: 11, color: 'rgba(255,107,53,0.5)', marginRight: 2 }}>{lastKg}kg</span>
+      )}
+      <input type="number" inputMode="decimal" value={set.poids}
+        style={inputStyle(!!set.poids)} placeholder={lastKg ? String(lastKg) : '0'} disabled={set.done}
+        onClick={e => e.stopPropagation()}
+        onChange={e => { e.stopPropagation(); onChange('poids', e.target.value) }}
+      />
+      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>kg</span>
+      {pr && <span style={{ fontSize: 13, flexShrink: 0 }}>🔥</span>}
+      <span style={checkStyle}>{set.done ? '✓' : '○'}</span>
+    </div>
+  )
+}
+
+// ─── ExerciseCard ─────────────────────────────────────────────────────────────
+
+function ExerciseCard({ exIdx, exercise, sets, charges, onSetChange, onSetToggle, cardRef, onScrollToNext, initialTimer }) {
+  const [open, setOpen] = useState(true)
+  const [timer, setTimer] = useState(initialTimer || null)
+
+  const color = GROUPE_COLORS[exercise.groupe] || '#FF6B35'
+  const doneSets = sets.filter(s => s.done).length
+  const total = sets.length
+  const allDone = doneSets === total
+  const isSuperset = exercise.technique === 'SS'
+  const exoNames = isSuperset ? exercise.nom.split(' + ') : []
+  const lastKg = getLastPoids(exercise.nom, charges)
+
+  const subtitle = [
+    `${exercise.series}×${repsLabel(exercise)}`,
+    lastKg ? `${lastKg} kg réf.` : null,
+    exercise.repos > 0 ? `${exercise.repos}s` : null,
+  ].filter(Boolean).join(' · ')
+
+  function handleToggle(setIdx) {
+    const wasDone = sets[setIdx].done
+    onSetToggle(exIdx, setIdx)
+    if (!wasDone && exercise.repos > 0) {
+      const endTime = Date.now() + exercise.repos * 1000
+      const state = { endTime, duration: exercise.repos }
+      setTimer(state)
+      localStorage.setItem(TIMER_KEY, JSON.stringify({ ...state, exerciseName: exercise.nom }))
+      scheduleNotification(exercise.repos)
+    }
+  }
+
+  function clearTimer() {
+    setTimer(null)
+    localStorage.removeItem(TIMER_KEY)
+  }
+
+  return (
+    <div
+      ref={cardRef}
+      style={{ background: '#111111', borderLeft: `3px solid ${color}`, borderRadius: 14, marginBottom: 10, overflow: 'hidden' }}
+    >
+      {/* Header */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between p-4 text-left"
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
       >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-white font-semibold text-sm leading-tight">{exercise.nom}</span>
-            {exercise.technique && (
-              <span
-                className="text-xs px-1.5 py-0.5 rounded-md font-medium"
-                style={{ background: TECH_COLORS[exercise.technique] + '30', color: TECH_COLORS[exercise.technique] }}
-              >
-                {TECH_LABELS[exercise.technique]}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="text-xs font-medium" style={{ color }}>{exercise.groupe}</span>
-            <span className="text-white/30 text-xs">{formatFormat(exercise)}</span>
-            <span className="text-white/30 text-xs">{exercise.repos > 0 ? `${exercise.repos}s repos` : ''}</span>
-          </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 3 }}>{exercise.nom}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{subtitle}</div>
         </div>
-        <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-          <span className="text-white/50 text-sm">{done}/{total}</span>
-          <svg
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            className="w-4 h-4 text-white/30 transition-transform"
-            style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
-          >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* Mini dot progress */}
+          <div style={{ display: 'flex', gap: 3 }}>
+            {sets.map((s, i) => (
+              <div key={i} style={{ width: 6, height: 6, borderRadius: 3, background: s.done ? '#10B981' : 'rgba(255,255,255,0.15)' }} />
+            ))}
+          </div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2" style={{ width: 16, height: 16, transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>
             <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-1">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-white/20 text-xs w-5"></span>
-            <span className="text-white/30 text-xs flex-1 text-center">Reps</span>
-            <span className="text-white/30 text-xs flex-1 text-center">Poids</span>
-            <span className="w-10"></span>
-          </div>
+        <div style={{ padding: '0 12px 12px' }}>
+          {/* SS column headers */}
+          {isSuperset && (
+            <div style={{ display: 'flex', gap: 10, padding: '0 14px', marginBottom: 4 }}>
+              <div style={{ width: 18 }} />
+              <div style={{ flex: 1 }} />
+              <div style={{ width: 58, textAlign: 'center', fontSize: 10, color: 'rgba(99,102,241,0.7)', fontWeight: 700 }}>
+                {exoNames[0]?.split(' ')[0]}
+              </div>
+              <div style={{ width: 58, textAlign: 'center', fontSize: 10, color: 'rgba(99,102,241,0.7)', fontWeight: 700 }}>
+                {exoNames[1]?.split(' ')[0]}
+              </div>
+              <div style={{ width: 20 }} />
+            </div>
+          )}
+
           {sets.map((set, i) => (
             <SerieRow
               key={i}
@@ -112,41 +237,91 @@ function ExerciseCard({ exIdx, exercise, sets, charges, onSetChange, onSetComple
               set={set}
               exercise={exercise}
               charges={charges}
+              isSuperset={isSuperset}
+              exoNames={exoNames}
               onChange={(field, val) => onSetChange(exIdx, i, field, val)}
-              onComplete={() => onSetComplete(exIdx, i)}
+              onToggle={() => handleToggle(i)}
             />
           ))}
+
+          {/* Inline rest timer */}
+          {timer && (
+            <InlineTimer
+              key={timer.endTime}
+              endTime={timer.endTime}
+              duration={timer.duration}
+              onDone={clearTimer}
+            />
+          )}
+
+          {/* Next exercise button */}
+          {allDone && onScrollToNext && (
+            <button
+              onClick={onScrollToNext}
+              style={{
+                width: '100%', marginTop: 10, padding: '10px 14px',
+                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 10, color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}
+            >
+              Exercice suivant <span style={{ color: '#FF6B35' }}>→</span>
+            </button>
+          )}
         </div>
       )}
     </div>
   )
 }
 
+// ─── StopwatchDisplay ────────────────────────────────────────────────────────
+
 function StopwatchDisplay({ startTime }) {
   const [elapsed, setElapsed] = useState(0)
-
   useEffect(() => {
-    const interval = setInterval(() => {
+    const id = setInterval(() => {
       setElapsed(Math.floor((Date.now() - new Date(startTime).getTime()) / 1000))
     }, 1000)
-    return () => clearInterval(interval)
+    return () => clearInterval(id)
   }, [startTime])
-
   const h = Math.floor(elapsed / 3600)
   const m = Math.floor((elapsed % 3600) / 60)
   const s = elapsed % 60
-  const label = h > 0
-    ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
-    : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
-
-  return <span className="text-white/60 text-sm font-mono">{label}</span>
+  return (
+    <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>
+      {h > 0
+        ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+        : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`}
+    </span>
+  )
 }
+
+// ─── TodayScreen ─────────────────────────────────────────────────────────────
 
 export default function TodayScreen() {
   const navigate = useNavigate()
-  const { activeSession, charges, startSession, updateSet, completeSet, finishSession } = useSession()
-  const [restTimer, setRestTimer] = useState(null)
+  const { activeSession, charges, startSession, updateSet, toggleSet, finishSession } = useSession()
   const [finished, setFinished] = useState(false)
+  const cardRefs = useRef([])
+
+  // Notification permission
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
+  // Restore timer from localStorage — find which card it belongs to
+  const storedTimer = (() => {
+    try {
+      const s = localStorage.getItem(TIMER_KEY)
+      if (s) {
+        const p = JSON.parse(s)
+        if (p.endTime > Date.now()) return p
+      }
+    } catch {}
+    return null
+  })()
 
   const todayKey = getTodayKey()
   const todayProg = PROGRAMME[todayKey]
@@ -156,15 +331,8 @@ export default function TodayScreen() {
     startSession(todayKey, todayProg.exercices, todayProg.titre)
   }
 
-  function handleSetComplete(exIdx, setIdx) {
-    completeSet(exIdx, setIdx)
-    const repos = activeSession.exercices[exIdx].repos
-    if (repos > 0) {
-      setRestTimer({ duration: repos, exerciseName: activeSession.exercices[exIdx].nom })
-    }
-  }
-
   function handleFinish() {
+    localStorage.removeItem(TIMER_KEY)
     finishSession()
     setFinished(true)
   }
@@ -173,6 +341,7 @@ export default function TodayScreen() {
   const doneSets  = activeSession?.exercices.reduce((acc, ex) => acc + ex.sets.filter(s => s.done).length, 0) ?? 0
   const progress  = totalSets > 0 ? (doneSets / totalSets) * 100 : 0
 
+  // ── Séance terminée ──
   if (finished) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
@@ -190,36 +359,26 @@ export default function TodayScreen() {
     )
   }
 
+  // ── Séance en cours ──
   if (activeSession) {
     return (
       <div className="flex flex-col min-h-full">
-        {restTimer && (
-          <CircularTimer
-            key={restTimer.exerciseName + Date.now()}
-            duration={restTimer.duration}
-            onDismiss={() => setRestTimer(null)}
-          />
-        )}
-
-        {/* Header */}
-        <div className="pt-safe px-4 pt-6 pb-4 flex-shrink-0">
-          <div className="flex items-center justify-between mb-1">
-            <h1 className="text-white font-bold text-lg leading-tight">{activeSession.titre}</h1>
+        {/* Header compact */}
+        <div className="pt-safe px-4 pt-5 pb-3 flex-shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <h1 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>{activeSession.titre}</h1>
             <StopwatchDisplay startTime={activeSession.startTime} />
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
-              <div
-                className="h-full rounded-full transition-all"
-                style={{ width: `${progress}%`, background: '#FF6B35' }}
-              />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ flex: 1, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }}>
+              <div style={{ height: '100%', borderRadius: 2, background: '#FF6B35', width: `${progress}%`, transition: 'width 0.4s' }} />
             </div>
-            <span className="text-white/40 text-xs">{doneSets}/{totalSets} séries</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', flexShrink: 0 }}>{doneSets}/{totalSets}</span>
           </div>
         </div>
 
         {/* Exercise list */}
-        <div className="flex-1 px-4 pb-4">
+        <div className="flex-1 px-3 pb-4">
           {activeSession.exercices.map((ex, exIdx) => (
             <ExerciseCard
               key={ex.id + exIdx}
@@ -227,17 +386,24 @@ export default function TodayScreen() {
               exercise={ex}
               sets={ex.sets}
               charges={charges}
+              cardRef={el => cardRefs.current[exIdx] = el}
+              initialTimer={storedTimer?.exerciseName === ex.nom ? storedTimer : null}
               onSetChange={updateSet}
-              onSetComplete={handleSetComplete}
+              onSetToggle={(eI, sI) => toggleSet(eI, sI)}
+              onScrollToNext={
+                exIdx < activeSession.exercices.length - 1
+                  ? () => cardRefs.current[exIdx + 1]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  : null
+              }
             />
           ))}
         </div>
 
-        {/* Finish button */}
+        {/* Finish */}
         <div className="px-4 pb-4 flex-shrink-0">
           <button
             onClick={handleFinish}
-            className="w-full py-4 rounded-2xl text-white font-bold text-base transition-opacity active:opacity-80"
+            className="w-full py-4 rounded-2xl text-white font-bold text-base active:opacity-80"
             style={{ background: '#FF6B35' }}
           >
             Terminer la séance
@@ -247,9 +413,8 @@ export default function TodayScreen() {
     )
   }
 
-  // No active session — show today's programme preview or rest day
+  // ── Preview / Repos ──
   const isRestDay = !todayProg
-  const dayNames = { lundi: 'Lundi', mardi: 'Mardi', mercredi: 'Mercredi', jeudi: 'Jeudi', vendredi: 'Vendredi', samedi: 'Samedi', dimanche: 'Dimanche' }
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
@@ -262,11 +427,8 @@ export default function TodayScreen() {
         {!isRestDay && (
           <div className="flex gap-2 mt-2 flex-wrap">
             {todayProg.groupes.map(g => (
-              <span
-                key={g}
-                className="text-xs px-2 py-0.5 rounded-full font-medium"
-                style={{ background: (GROUPE_COLORS[g] || '#888') + '25', color: GROUPE_COLORS[g] || '#888' }}
-              >
+              <span key={g} className="text-xs px-2 py-0.5 rounded-full font-medium"
+                style={{ background: (GROUPE_COLORS[g] || '#888') + '25', color: GROUPE_COLORS[g] || '#888' }}>
                 {g}
               </span>
             ))}
@@ -277,12 +439,9 @@ export default function TodayScreen() {
       {isRestDay ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
           <div className="text-5xl">😴</div>
-          <p className="text-white/60 text-center text-base">Journée de récupération — profites-en pour bien dormir et manger.</p>
-          <button
-            onClick={() => navigate('/generer')}
-            className="mt-4 px-6 py-3 rounded-2xl text-white text-sm font-medium"
-            style={{ background: 'rgba(255,255,255,0.08)' }}
-          >
+          <p className="text-white/60 text-center">Journée de récupération — profites-en pour bien dormir et manger.</p>
+          <button onClick={() => navigate('/generer')} className="mt-4 px-6 py-3 rounded-2xl text-white text-sm font-medium"
+            style={{ background: 'rgba(255,255,255,0.08)' }}>
             Générer une séance spéciale
           </button>
         </div>
@@ -291,24 +450,13 @@ export default function TodayScreen() {
           {todayProg.exercices.map((ex, i) => {
             const color = GROUPE_COLORS[ex.groupe] || '#FF6B35'
             return (
-              <div
-                key={ex.id + i}
-                className="flex items-center gap-3 py-3"
-                style={{ borderBottom: 'solid 1px rgba(255,255,255,0.06)' }}
-              >
-                <div className="w-1 h-8 rounded-full flex-shrink-0" style={{ background: color }} />
+              <div key={ex.id + i} className="flex items-center gap-3 py-3"
+                style={{ borderBottom: 'solid 1px rgba(255,255,255,0.06)' }}>
+                <div className="w-1 h-7 rounded-full flex-shrink-0" style={{ background: color }} />
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium truncate">{ex.nom}</p>
                   <p className="text-white/40 text-xs mt-0.5">{formatFormat(ex)} · {ex.repos > 0 ? `${ex.repos}s` : 'RP'}</p>
                 </div>
-                {ex.technique && (
-                  <span
-                    className="text-xs px-1.5 py-0.5 rounded-md font-medium flex-shrink-0"
-                    style={{ background: TECH_COLORS[ex.technique] + '25', color: TECH_COLORS[ex.technique] }}
-                  >
-                    {ex.technique}
-                  </span>
-                )}
               </div>
             )
           })}
@@ -317,11 +465,8 @@ export default function TodayScreen() {
 
       {!isRestDay && (
         <div className="px-4 py-4 flex-shrink-0">
-          <button
-            onClick={handleStart}
-            className="w-full py-4 rounded-2xl text-white font-bold text-base active:opacity-80"
-            style={{ background: '#FF6B35' }}
-          >
+          <button onClick={handleStart} className="w-full py-4 rounded-2xl text-white font-bold text-base active:opacity-80"
+            style={{ background: '#FF6B35' }}>
             Démarrer la séance
           </button>
         </div>

@@ -9,7 +9,7 @@ import {
 const TABS = ['Séance', 'Progression']
 
 export default function ChargesScreen() {
-  const { activeSession, charges, updateSet, completeSet } = useSession()
+  const { activeSession, charges, updateSet, toggleSet } = useSession()
   const [tab, setTab] = useState(0)
 
   // Stats for active session
@@ -142,7 +142,7 @@ export default function ChargesScreen() {
                             </div>
                             {pr && <span className="text-xs">🔥</span>}
                             <button
-                              onClick={() => completeSet(exIdx, setIdx)}
+                              onClick={() => toggleSet(exIdx, setIdx)}
                               disabled={set.done}
                               className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
                               style={{

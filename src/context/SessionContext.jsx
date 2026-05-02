@@ -29,7 +29,7 @@ export function SessionProvider({ children }) {
       startTime: new Date().toISOString(),
       exercices: exercices.map(ex => ({
         ...ex,
-        sets: Array.from({ length: ex.series }, () => ({ reps: '', poids: '', done: false })),
+        sets: Array.from({ length: ex.series }, () => ({ reps: '', poids: '', w1: '', w2: '', done: false })),
       })),
     }
     setActiveSession(session)
@@ -47,12 +47,15 @@ export function SessionProvider({ children }) {
     })
   }, [])
 
-  const completeSet = useCallback((exIdx, setIdx) => {
+  const toggleSet = useCallback((exIdx, setIdx) => {
     setActiveSession(prev => {
       if (!prev) return prev
       const updated = JSON.parse(JSON.stringify(prev))
-      updated.exercices[exIdx].sets[setIdx].done = true
-      updated.exercices[exIdx].sets[setIdx].timestamp = new Date().toISOString()
+      const wasDone = updated.exercices[exIdx].sets[setIdx].done
+      updated.exercices[exIdx].sets[setIdx].done = !wasDone
+      if (!wasDone) {
+        updated.exercices[exIdx].sets[setIdx].timestamp = new Date().toISOString()
+      }
       saveJSON('muscu_session_active', updated)
       return updated
     })
@@ -122,7 +125,7 @@ export function SessionProvider({ children }) {
   return (
     <SessionContext.Provider value={{
       activeSession, seances, charges,
-      startSession, updateSet, completeSet, finishSession, cancelSession,
+      startSession, updateSet, toggleSet, finishSession, cancelSession,
     }}>
       {children}
     </SessionContext.Provider>
