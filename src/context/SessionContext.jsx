@@ -117,6 +117,15 @@ export function SessionProvider({ children }) {
     return completed
   }, [activeSession, seances, charges])
 
+  const modifyActiveSession = useCallback((transform) => {
+    setActiveSession(prev => {
+      if (!prev) return prev
+      const updated = transform(JSON.parse(JSON.stringify(prev)))
+      saveJSON('muscu_session_active', updated)
+      return updated
+    })
+  }, [])
+
   const cancelSession = useCallback(() => {
     setActiveSession(null)
     localStorage.removeItem('muscu_session_active')
@@ -125,7 +134,7 @@ export function SessionProvider({ children }) {
   return (
     <SessionContext.Provider value={{
       activeSession, seances, charges,
-      startSession, updateSet, toggleSet, finishSession, cancelSession,
+      startSession, updateSet, toggleSet, finishSession, cancelSession, modifyActiveSession,
     }}>
       {children}
     </SessionContext.Provider>
