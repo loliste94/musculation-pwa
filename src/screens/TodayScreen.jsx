@@ -227,13 +227,9 @@ function SerieRow({ setIdx, set, exercise, charges, onChange, onToggle, isSupers
 
 // ─── ExerciseCard ─────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exIdx, exercise, sets, charges, onSetChange, onSetToggle, cardRef, onScrollToNext, initialTimer }) {
+function ExerciseCard({ exIdx, exercise, sets, charges, onSetChange, onSetToggle, cardRef, onScrollToNext, initialTimer, timerDuration }) {
   const [open, setOpen] = useState(true)
   const [timer, setTimer] = useState(initialTimer || null)
-  const [timerDuration, setTimerDuration] = useState(() => {
-    const saved = parseInt(localStorage.getItem(TIMER_PREF_KEY))
-    return saved > 0 ? saved : (exercise.repos || 90)
-  })
 
   const color = GROUPE_COLORS[exercise.groupe] || '#FF6B35'
   const doneSets = sets.filter(s => s.done).length
@@ -247,11 +243,6 @@ function ExerciseCard({ exIdx, exercise, sets, charges, onSetChange, onSetToggle
     getLastPoids(exercise.nom, charges) ? `${getLastPoids(exercise.nom, charges)} kg réf.` : null,
     exercise.repos > 0 ? `${exercise.repos}s` : null,
   ].filter(Boolean).join(' · ')
-
-  function selectPreset(val) {
-    setTimerDuration(val)
-    localStorage.setItem(TIMER_PREF_KEY, String(val))
-  }
 
   function handleToggle(setIdx) {
     const wasDone = sets[setIdx].done
@@ -302,30 +293,6 @@ function ExerciseCard({ exIdx, exercise, sets, charges, onSetChange, onSetToggle
 
       {open && (
         <div style={{ padding: '0 12px 12px' }}>
-
-          {/* Timer presets */}
-          {exercise.repos > 0 && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ display: 'flex', gap: 5, marginBottom: 6 }}>
-                {TIMER_PRESETS.map(p => (
-                  <button key={p.value} onClick={() => selectPreset(p.value)}
-                    style={{
-                      flex: 1, padding: '5px 2px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                      background: timerDuration === p.value ? '#FF6B35' : 'rgba(255,255,255,0.06)',
-                      color: timerDuration === p.value ? '#fff' : 'rgba(255,255,255,0.35)',
-                      fontSize: 11, fontWeight: 700, transition: 'background 0.15s',
-                    }}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <input type="range" min={15} max={300} step={15} value={timerDuration}
-                onChange={e => selectPreset(parseInt(e.target.value))}
-                style={{ width: '100%', accentColor: '#FF6B35', cursor: 'pointer' }}
-              />
-            </div>
-          )}
 
           {/* SS column headers */}
           {isSuperset && (
@@ -499,6 +466,10 @@ export default function TodayScreen() {
   const navigate = useNavigate()
   const { activeSession, charges, startSession, updateSet, toggleSet, finishSession, modifyActiveSession } = useSession()
   const [finished, setFinished] = useState(false)
+  const [timerDuration, setTimerDuration] = useState(() => {
+    const saved = parseInt(localStorage.getItem(TIMER_PREF_KEY))
+    return saved > 0 ? saved : 90
+  })
   const [agentOpen, setAgentOpen] = useState(false)
   const [agentMessages, setAgentMessages] = useState([
     { role: 'assistant', text: "Bonjour ! Je peux adapter ta séance en temps réel. Dis-moi ce qui se passe." }
@@ -597,8 +568,35 @@ export default function TodayScreen() {
           </div>
         </div>
 
+        {/* Sticky timer preset banner */}
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 10,
+          background: '#080808', borderBottom: '1px solid rgba(255,255,255,0.07)',
+          padding: '8px 12px 10px',
+        }}>
+          <div style={{ display: 'flex', gap: 5, marginBottom: 6 }}>
+            {TIMER_PRESETS.map(p => (
+              <button key={p.value}
+                onClick={() => { setTimerDuration(p.value); localStorage.setItem(TIMER_PREF_KEY, String(p.value)) }}
+                style={{
+                  flex: 1, padding: '6px 2px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  background: timerDuration === p.value ? '#FF6B35' : 'rgba(255,255,255,0.07)',
+                  color: timerDuration === p.value ? '#fff' : 'rgba(255,255,255,0.38)',
+                  fontSize: 12, fontWeight: 700, transition: 'background 0.15s',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <input type="range" min={15} max={300} step={15} value={timerDuration}
+            onChange={e => { const v = parseInt(e.target.value); setTimerDuration(v); localStorage.setItem(TIMER_PREF_KEY, String(v)) }}
+            style={{ width: '100%', accentColor: '#FF6B35', cursor: 'pointer', display: 'block' }}
+          />
+        </div>
+
         {/* Exercise list */}
-        <div className="flex-1 px-3 pb-4">
+        <div className="flex-1 px-3 pb-4 pt-3">
           {activeSession.exercices.map((ex, exIdx) => (
             <ExerciseCard
               key={ex.id + exIdx}
@@ -606,6 +604,7 @@ export default function TodayScreen() {
               exercise={ex}
               sets={ex.sets}
               charges={charges}
+              timerDuration={timerDuration}
               cardRef={el => cardRefs.current[exIdx] = el}
               initialTimer={storedTimer?.exerciseName === ex.nom ? storedTimer : null}
               onSetChange={updateSet}
