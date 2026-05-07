@@ -59,12 +59,11 @@ function setCache(key, url) {
   try { localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ url, ts: Date.now() })) } catch {}
 }
 
+const RAPIDAPI_KEY = "5115f9db53msh7afcfea549f21bcp1450c4jsnb8aca140f56d"
+
 async function fetchGif(searchTerm) {
-  const apiKey = import.meta.env.VITE_RAPIDAPI_KEY
+  const apiKey = RAPIDAPI_KEY
   console.log('API KEY:', apiKey)
-  console.log('Fetching:', searchTerm)
-  if (!apiKey) return ''
-  console.log('RAPIDAPI KEY:', import.meta.env.VITE_RAPIDAPI_KEY)
   console.log('EXERCISE NAME:', searchTerm)
   const res = await fetch(
     `https://exercisedb.p.rapidapi.com/exercises/name/${encodeURIComponent(searchTerm)}?limit=1&offset=0`,
