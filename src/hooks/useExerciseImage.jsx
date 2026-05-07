@@ -65,12 +65,20 @@ async function fetchGif(searchTerm) {
   const apiKey = RAPIDAPI_KEY
   console.log('API KEY:', apiKey)
   console.log('EXERCISE NAME:', searchTerm)
-  const res = await fetch(
+  const response = await fetch(
     `https://exercisedb.p.rapidapi.com/exercises/name/${encodeURIComponent(searchTerm)}?limit=1&offset=0`,
-    { headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' } }
+    {
+      method: "GET",
+      headers: {
+        "x-rapidapi-key": apiKey,
+        "x-rapidapi-host": "exercisedb.p.rapidapi.com"
+      }
+    }
   )
-  if (!res.ok) return ''
-  const data = await res.json()
+  console.log('Status:', response.status)
+  const data = await response.json()
+  console.log('Response:', data)
+  if (!response.ok) return ''
   return data?.[0]?.gifUrl || ''
 }
 
